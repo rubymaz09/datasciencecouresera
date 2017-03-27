@@ -1,0 +1,158 @@
+---
+title: "Practical Machine Learning Final Project"
+author: "Ruby Mazumdar"
+date: "March 26, 2017"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Goal
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. The goal of this project will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict the manner in which they did the exercise. 
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+# # Loading the Data and Required Packages
+
+The first step is to load the data.
+
+```{r} 
+setwd("C:/Users/rubymaz/Desktop")
+training<-read.table("./pml-training.csv", header=TRUE, sep=",")
+testing<-read.table("./pml-testing.csv",header=TRUE, sep=",")
+library(caret)
+## Warning: package 'caret' was built under R version 3.1.2
+## Loading required package: lattice
+## Loading required package: ggplot2
+library(rattle)
+## Warning: package 'rattle' was built under R version 3.1.2
+## Rattle: A free graphical interface for data mining with R.
+## Version 3.4.1 Copyright (c) 2006-2014 Togaware Pty Ltd.
+## Type 'rattle()' to shake, rattle, and roll your data.
+library(gridExtra)
+## Loading required package: grid
+
+
+```
+
+## Cleaning the training data sets
+
+The data provided has many variables with missing data as well as information that is not relevant to the question being analyzed. Relevant variables are extracted using pattern recognition for relevant strings, leaving 52 variables.
+
+```{r pressure, echo=FALSE}
+
+trainingaccel<-grepl("^accel",names(training))
+trainingtotal<-grepl("^total",names(training))
+roll<-grepl("^roll",names(training))
+pitch<-grepl("^pitch",names(training))
+yaw<-grepl("^yaw",names(training))
+magnet<-grepl("^magnet",names(training))
+gyro<-grepl("^gyro",names(training))
+acceldata<-training[ ,trainingaccel]
+rolldata<-training[ ,roll]
+pitchdata<-training[ ,pitch]
+yawdata<-training[,yaw]
+magnetdata<-training[,magnet]
+gyrodata<-training[,gyro]
+totaldata<-training[,trainingtotal]
+trainClasse<-cbind(acceldata,rolldata,pitchdata,yawdata,magnetdata,gyrodata,totaldata,training[ ,160])
+colnames(trainClasse)[53]<-'Classe'
+```
+
+## Cleaning up Test Data
+Test data is cleaned now
+
+```{r cars} 
+testingaccel<-grepl("^accel",names(testing))
+testingtotal<-grepl("^total",names(testing))
+troll<-grepl("^roll",names(testing))
+tpitch<-grepl("^pitch",names(testing))
+tyaw<-grepl("^yaw",names(testing))
+tmagnet<-grepl("^magnet",names(testing))
+tgyro<-grepl("^gyro",names(testing))
+tacceldata<-testing[ ,testingaccel]
+trolldata<-testing[ ,troll]
+tpitchdata<-testing[,tpitch]
+tyawdata<-testing[,tyaw]
+tmagnetdata<-testing[,tmagnet]
+tgyrodata<-testing[,tgyro]
+ttotaldata<-testing[,testingtotal]
+testClasse<-cbind(tacceldata,trolldata,tpitchdata,tyawdata,tmagnetdata,tgyrodata,ttotaldata,testing[ ,160])
+colnames(testClasse)[53]<-'problem.id'
+
+```
+
+## Making Training & Testing Subset
+
+A training subset is created with 60% of the original training data set to be used for training and the remaining 40% to be used as the testing set (before final testing is performed).
+
+```{r}
+
+set.seed(400)
+inTrain = createDataPartition(trainClasse$Classe, p = .60)[[1]]
+trainingsubset = trainClasse[ inTrain,]
+testingsubset = trainClasse[-inTrain,]
+```
+
+## Model
+
+As the outcomes are categorical (nominal), a decision tree was the first model tested using the method rpart.
+
+```{r}
+set.seed(400)
+modFit<-train(Classe~.,method="rpart", data=trainingsubset)
+## Loading required package: rpart
+print(modFit$finalModel)
+```
+## Fancy Plot
+Producing RPart Fancy Plots
+
+```{r}
+fancyRpartPlot(modFit$finalModel,cex=.5,under.cex=1,shadow.offset=0)
+```
+# class Predict
+
+Now trying the class predict and produce confusion matrix
+
+```{r}
+classepredict=predict(modFit,testingsubset)
+confusionMatrix(testingsubset$Classe,classepredict)
+```
+
+The outcomes are not as definitive as one would hope in viewing the plot. In testing this model on the testing subset, it is revealed to have a 54.6% accuracy, which is only slightly better than chance. The variables used in the algorithm include roll_belt, pitch_forearm, yaw_belt,magnet_dumbbell_Z,pitch_belt, and magnet_dumbell_x. The model is the least accurate for outcome D.
+
+# #Random Forest Model
+
+As the rpart model was largely inaccurate and the outcome variable appears to have more nuances in variable selection as demonstrated in the rpart tree, a random forest model was tested to see if that method fit the data more appropriately.
+
+
+set.seed(400)
+modFit2 <- train(Classe ~ ., method="rf",trControl=trainControl(method = "cv", number = 4), data=trainingsubset)
+print(modFit2)
+varImp(modFit2)
+classepredict2=predict(modFit2,testingsubset)
+confusionMatrix(testingsubset$Classe,classepredict2)
+
+
+
+
+## Conclusion
+
+Random Forest was a superior model for prediction of exercise quality compared to rpart. The nominal categories were dependent on various variables and the interaction between them. The RF model had over 99% accuracy and fitted well to other subsamples of the data. However, the algorithm may not have as high of accuracy on other samples, particularly ones with different subjects.
+
+In the first model D was the most difficult to predict and in the second C was the most difficult to predict. This makes theoretical sense as Class C is lifting the dumbbell only halfway and Class D is lowering the dumbbell only halfway. These movements may be hard to distinguish by the data collected and could be a topic for future research regarding how to detect this difference-if deemed important.
+
+Overall, it is interesting to consider how monitors are affected by the quality of an exercise and are able to predict the error made. This is an important indicator for health and fitness as it is not just the quantity of exercise that can be collected and analyzed but also the quality.
+
